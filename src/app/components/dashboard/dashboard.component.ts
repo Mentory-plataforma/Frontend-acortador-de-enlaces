@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import { CommonModule } from '@angular/common';
 import {
@@ -11,6 +11,7 @@ import {
 import { AuthService } from '../../services/auth.service';
 import { LinksService, Link } from '../../services/links.service';
 import { AnalyticsService, Analytics } from '../../services/analytics.service';
+import Pusher from 'pusher-js';
 
 @Component({
   selector: 'app-dashboard',
@@ -339,16 +340,18 @@ export class DashboardComponent implements OnInit {
   cargandoEnlaces = true;
   dominioBase = environment.apiUrl.replace(/^https?:\/\//, '');
 
-  // Variables para los modales
   showEditModal = false;
   showDeleteModal = false;
   selectedLink: Link | null = null;
   editAliasValue = '';
 
-  // Variables para la notificación (Toast)
   showToast = false;
   toastMessage = '';
   private toastTimeout: any;
+
+  private pusherInstance: Pusher | null = null;
+
+  private zone = inject(NgZone);
 
   linkForm: FormGroup = this.fb.group({
     url: ['', [Validators.required, Validators.pattern('https?://.+')]],
@@ -357,6 +360,35 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit() {
     this.loadData();
+    this.iniciarTiempoReal();
+  }
+
+  iniciarTiempoReal() {
+    this.pusherInstance = new Pusher(environment.pusherKey, {
+      cluster: environment.pusherCluster,
+    });
+
+    const channel = this.pusherInstance.subscribe('mentory-stats');
+
+    channel.bind('nuevo-clic', (data: { alias: string; total_clicks: number }) => {
+      this.zone.run(() => {
+        this.links = this.links.map((link) => {
+          if (link.alias === data.alias) {
+            return { ...link, total_clicks: data.total_clicks };
+          }
+          return link;
+        });
+
+        if (this.stats) {
+          this.stats = {
+            ...this.stats,
+            totalClicks: Number(this.stats.totalClicks) + 1,
+          };
+        }
+
+        this.cdr.detectChanges();
+      });
+    });
   }
 
   loadData() {
@@ -384,7 +416,6 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  // Método para disparar notificaciones personalizadas
   showNotification(message: string) {
     this.toastMessage = message;
     this.showToast = true;
@@ -394,7 +425,6 @@ export class DashboardComponent implements OnInit {
       clearTimeout(this.toastTimeout);
     }
 
-    // Ocultar notificación después de 3 segundos
     this.toastTimeout = setTimeout(() => {
       this.showToast = false;
       this.cdr.detectChanges();
@@ -419,11 +449,9 @@ export class DashboardComponent implements OnInit {
   }
 
   copyLink(alias: string) {
-    // Generamos la URL completa limpia
     const fullUrl = `https://${this.dominioBase}/${alias}`;
     navigator.clipboard.writeText(fullUrl);
 
-    // Mostramos nuestro Toast en lugar del feo alert()
     this.showNotification('¡Enlace copiado al portapapeles!');
   }
 
