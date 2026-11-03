@@ -19,12 +19,19 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export interface UpdateLinkPayload {
+  url?: string;
+  //alias?: string;
+  activo?: boolean;
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class LinksService {
   private http = inject(HttpClient);
   private apiUrl = `${environment.apiUrl}/links`;
+  private apiLinksUrl = `${environment.apiUrl}/api/links`;
 
   getAll(): Observable<Link[]> {
     return this.http.get<ApiResponse<Link[]>>(this.apiUrl).pipe(map((response) => response.data));
@@ -36,15 +43,15 @@ export class LinksService {
       .pipe(map((response) => response.data));
   }
 
-  update(alias: string, data: Partial<Link>): Observable<Link> {
+  update(alias: string, data: UpdateLinkPayload): Observable<Link> {
     return this.http
-      .put<ApiResponse<Link>>(`${this.apiUrl}/${alias}`, data)
+      .put<ApiResponse<Link>>(`${this.apiLinksUrl}/${encodeURIComponent(alias)}`, data)
       .pipe(map((response) => response.data));
   }
 
-  delete(alias: string): Observable<any> {
+  desactivate(alias: string): Observable<Link> {
     return this.http
-      .delete<ApiResponse<any>>(`${this.apiUrl}/${alias}`)
+      .delete<ApiResponse<Link>>(`${this.apiLinksUrl}/${encodeURIComponent(alias)}`)
       .pipe(map((response) => response.data));
   }
 }
