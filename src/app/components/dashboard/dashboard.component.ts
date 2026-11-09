@@ -7,6 +7,8 @@ import {
   FormBuilder,
   FormGroup,
   Validators,
+  AbstractControl,
+  ValidationErrors,
 } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { LinksService, Link } from '../../services/links.service';
@@ -249,15 +251,16 @@ import Pusher from 'pusher-js';
           <div
             class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-xl"
           >
-            <h3 class="text-xl font-bold text-white mb-2">Editar Alias</h3>
+            <h3 class="text-xl font-bold text-white mb-2">Editar Enlace</h3>
             <p class="text-sm text-slate-400 mb-5">
-              Ingresa el nuevo alias para tu enlace. Debe ser único.
+              Ingresa la nueva dirección de destino. Deja el campo vacío para conservar la URL actual.
             </p>
             <input
-              type="text"
-              [(ngModel)]="editAliasValue"
-              class="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none mb-6"
-              placeholder="Ej. mi-nuevo-alias"
+              type="url"
+              [(ngModel)]="editUrlValue"
+              [ngModelOptions]="{ standalone: true }"
+              class="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-indigo-500 outline-none mb-4"
+              placeholder="https://ejemplo.com/destino"
             />
             <div class="flex justify-end gap-3">
               <button
@@ -324,6 +327,21 @@ import Pusher from 'pusher-js';
           <span class="font-medium">{{ toastMessage }}</span>
         </div>
       }
+
+      @if (showToastError) {
+       <div class="fixed bottom-6 right-6 bg-red-500/10 border border-red-500/20 text-red-400 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 z-50">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            ></path>
+          </svg>
+
+          <span class="font-medium">{{ toastMessageError }}</span>
+        </div>
+      }
     </div>
   `,
 })
@@ -343,10 +361,15 @@ export class DashboardComponent implements OnInit {
   showEditModal = false;
   showDeleteModal = false;
   selectedLink: Link | null = null;
-  editAliasValue = '';
+  editUrlValue = '';
 
   showToast = false;
+  //Notificación Error
+  showToastError = false;
+
   toastMessage = '';
+  toastMessageError = '';
+
   private toastTimeout: any;
 
   private pusherInstance: Pusher | null = null;
@@ -354,7 +377,7 @@ export class DashboardComponent implements OnInit {
   private zone = inject(NgZone);
 
   linkForm: FormGroup = this.fb.group({
-    url: ['', [Validators.required, Validators.pattern('https?://.+')]],
+    url: ['', [Validators.required, Validators.pattern('https?://.+'), this.urlExist.bind(this)]],
     alias: [''],
   });
 
@@ -431,6 +454,21 @@ export class DashboardComponent implements OnInit {
     }, 3000);
   }
 
+  showNotificationError(message: string) {
+    this.toastMessageError = message;
+    this.showToastError = true; 
+    this.cdr.detectChanges();
+
+     if (this.toastTimeout) {
+      clearTimeout(this.toastTimeout);
+    }
+
+    this.toastTimeout = setTimeout(() => {
+      this.showToastError = false;
+      this.cdr.detectChanges();
+    }, 3000);
+  }
+
   createLink() {
     if (this.linkForm.invalid) return;
     this.loading = true;
@@ -449,37 +487,72 @@ export class DashboardComponent implements OnInit {
   }
 
   copyLink(alias: string) {
-    const fullUrl = `https://${this.dominioBase}/${alias}`;
-    navigator.clipboard.writeText(fullUrl);
+    const url = `${environment.apiUrl}/${alias}`;
+    //const fullUrl = `https://${this.dominioBase}/${alias}`;
+    navigator.clipboard.writeText(url);
 
     this.showNotification('¡Enlace copiado al portapapeles!');
   }
 
   openEditModal(link: Link) {
     this.selectedLink = link;
-    this.editAliasValue = link.alias;
+    this.editUrlValue = '';
     this.showEditModal = true;
   }
 
   closeEditModal() {
     this.showEditModal = false;
     this.selectedLink = null;
-    this.editAliasValue = '';
+    this.editUrlValue = '';
+  }
+
+  private urlExist(fieldIn: AbstractControl): null | ValidationErrors{
+  const url = fieldIn.value;
+    if (!fieldIn) return null;
+  try {
+    new URL(url);
+    return null;
+  } catch {
+    return { InvalidUrl: true };
+  }
+  }
+
+  private isValidDestinationUrl(value: string): boolean {
+    try {
+      const parsedUrl = new URL(value);
+      return (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') && !!parsedUrl.hostname;
+    } catch {
+      return false;
+    }
   }
 
   confirmEdit() {
-    if (
-      this.selectedLink &&
-      this.editAliasValue &&
-      this.editAliasValue !== this.selectedLink.alias
-    ) {
-      this.linksService
-        .update(this.selectedLink.alias, { alias: this.editAliasValue })
-        .subscribe(() => {
+    if (this.selectedLink) {
+      const changes: { url?: string } = {};
+      const url = this.editUrlValue.trim();
+
+      if (url && !this.isValidDestinationUrl(url)) {
+        this.showNotificationError('La URL no es válida. Ingresa una dirección http o https.');
+        return;
+      }
+      if (url && url !== this.selectedLink.url) changes.url = url;
+
+      if (Object.keys(changes).length === 0) {
+        this.closeEditModal();
+        return;
+      }
+
+      this.linksService.update(this.selectedLink.alias, changes).subscribe({
+        next: () => {
           this.loadData();
           this.closeEditModal();
-          this.showNotification('¡Alias actualizado correctamente!');
-        });
+          this.showNotification('¡Enlace actualizado correctamente!');
+        },
+        error: (err) => {
+          console.error('Error actualizando enlace:', err);
+          this.showNotificationError('No se pudo actualizar el enlace');
+        },
+      });
     } else {
       this.closeEditModal();
     }
@@ -497,10 +570,16 @@ export class DashboardComponent implements OnInit {
 
   confirmDelete() {
     if (this.selectedLink) {
-      this.linksService.delete(this.selectedLink.alias).subscribe(() => {
-        this.loadData();
-        this.closeDeleteModal();
-        this.showNotification('Enlace eliminado del sistema');
+      this.linksService.desactivate(this.selectedLink.alias).subscribe({
+        next: () => {
+          this.loadData();
+          this.closeDeleteModal();
+          this.showNotification('Enlace desactivado');
+        },
+        error: (err) => {
+          console.error('Error desactivando enlace:', err);
+          this.showNotification('No se pudo desactivar el enlace');
+        },
       });
     }
   }
