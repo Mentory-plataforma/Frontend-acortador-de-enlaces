@@ -487,8 +487,9 @@ export class DashboardComponent implements OnInit {
   }
 
   copyLink(alias: string) {
-    const fullUrl = `https://${this.dominioBase}/${alias}`;
-    navigator.clipboard.writeText(fullUrl);
+    const url = `${environment.apiUrl}/${alias}`;
+    //const fullUrl = `https://${this.dominioBase}/${alias}`;
+    navigator.clipboard.writeText(url);
 
     this.showNotification('¡Enlace copiado al portapapeles!');
   }
