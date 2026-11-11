@@ -12,7 +12,13 @@ import {
 } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { LinksService, Link } from '../../services/links.service';
-import { AnalyticsService, Analytics } from '../../services/analytics.service';
+import {
+  AnalyticsService,
+  Analytics,
+  ClickFilterField,
+  ClickPeriod,
+  LinkClickDetails,
+} from '../../services/analytics.service';
 import Pusher from 'pusher-js';
 
 @Component({
@@ -46,6 +52,13 @@ import Pusher from 'pusher-js';
               ></path>
             </svg>
             Dashboard
+          </a>
+          <a
+            href="#"
+            class="flex items-center gap-3 px-4 py-3 rounded-lg bg-indigo-600/10 text-indigo-400 font-medium"
+          >
+          
+            Estadísticas
           </a>
         </nav>
 
@@ -189,6 +202,26 @@ import Pusher from 'pusher-js';
                             </svg>
                           </button>
                           <button
+                            (click)="openClickDetails(link)"
+                            class="p-2 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-lg transition-all"
+                            title="Ver información de clics"
+                            [attr.aria-label]="'Ver clics del enlace ' + link.alias"
+                          >
+                            <svg
+                              class="w-5 h-5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M5 3l13 9-7 1-3 7L5 3zM14 14l5 5"
+                              ></path>
+                            </svg>
+                          </button>
+                          <button
                             (click)="openEditModal(link)"
                             class="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-all"
                             title="Editar"
@@ -311,6 +344,304 @@ import Pusher from 'pusher-js';
         </div>
       }
 
+      <!-- MODAL DE INFORMACIÓN DE CLICS -->
+      @if (showClickDetailsModal && selectedClicksLink) {
+        <div
+          class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6"
+          (click)="closeClickDetails()"
+        >
+          <section
+            class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-7xl max-h-[92vh] shadow-2xl flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            [attr.aria-label]="'Información de clics de ' + selectedClicksLink.alias"
+            (click)="$event.stopPropagation()"
+          >
+            <header class="p-5 md:p-6 border-b border-slate-800 flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <h3 class="text-xl md:text-2xl font-bold text-white">Clics de /{{ selectedClicksLink.alias }}</h3>
+                <p class="text-sm text-slate-400 mt-1 truncate">{{ selectedClicksLink.url }}</p>
+              </div>
+              <button
+                (click)="closeClickDetails()"
+                class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"
+                aria-label="Cerrar información de clics"
+              >
+                <span class="text-xl leading-none">×</span>
+              </button>
+            </header>
+
+            <div class="p-5 md:p-6 overflow-y-auto">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div class="rounded-xl bg-slate-800/80 p-4">
+                  <p class="text-xs uppercase tracking-wide text-slate-400">Clics totales</p>
+                  <p class="text-2xl font-bold text-indigo-300 mt-1">{{ clickDetails?.totalClicks ?? 0 }}</p>
+                </div>
+                <div class="rounded-xl bg-slate-800/80 p-4">
+                  <p class="text-xs uppercase tracking-wide text-slate-400">Visitantes únicos del filtro</p>
+                  <p class="text-2xl font-bold text-emerald-300 mt-1">{{ clickDetails?.uniqueVisitors ?? 0 }}</p>
+                </div>
+                <div class="rounded-xl bg-slate-800/80 p-4">
+                  <p class="text-xs uppercase tracking-wide text-slate-400">Coincidencias del filtro</p>
+                  <p class="text-2xl font-bold text-white mt-1">{{ clickDetails?.matchingClicks ?? 0 }}</p>
+                </div>
+              </div>
+
+              <section class="rounded-xl bg-slate-800/50 border border-slate-800 p-4 mb-4" aria-label="Filtros por fecha y hora">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                  <label class="text-xs text-slate-400">
+                    Desde
+                    <input
+                      type="date"
+                      [(ngModel)]="clickDateFrom"
+                      [ngModelOptions]="{ standalone: true }"
+                      class="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                    />
+                  </label>
+                  <label class="text-xs text-slate-400">
+                    Hasta
+                    <input
+                      type="date"
+                      [(ngModel)]="clickDateTo"
+                      [ngModelOptions]="{ standalone: true }"
+                      class="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                    />
+                  </label>
+                  <label class="text-xs text-slate-400">
+                    Agrupar por
+                    <select
+                      [(ngModel)]="clickPeriod"
+                      [ngModelOptions]="{ standalone: true }"
+                      class="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                    >
+                      <option value="day">Día</option>
+                      <option value="week">Semana</option>
+                      <option value="month">Mes</option>
+                    </select>
+                  </label>
+                  <label class="text-xs text-slate-400">
+                    Hora desde
+                    <select
+                      [(ngModel)]="clickHourFrom"
+                      [ngModelOptions]="{ standalone: true }"
+                      class="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                    >
+                      <option value="">Cualquier hora</option>
+                      @for (hour of hourOptions; track hour.value) {
+                        <option [value]="hour.value">{{ hour.label }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="text-xs text-slate-400">
+                    Hora hasta
+                    <select
+                      [(ngModel)]="clickHourTo"
+                      [ngModelOptions]="{ standalone: true }"
+                      class="mt-1 block w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                    >
+                      <option value="">Cualquier hora</option>
+                      @for (hour of hourOptions; track hour.value) {
+                        <option [value]="hour.value">{{ hour.label }}</option>
+                      }
+                    </select>
+                  </label>
+                  <div class="flex items-end">
+                    <button
+                      type="button"
+                      (click)="applyClickFilter()"
+                      class="w-full px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50"
+                      [disabled]="clickDetailsLoading"
+                    >Aplicar fechas</button>
+                  </div>
+                </div>
+                <p class="text-xs text-slate-500 mt-3">Las horas usan {{ clickTimeZone }}. Si la hora inicial supera la final, por ejemplo 22:00–03:00, se filtra el horario nocturno dentro de las fechas elegidas.</p>
+              </section>
+
+              <form class="flex flex-col sm:flex-row gap-3 mb-4" (ngSubmit)="applyClickFilter()">
+                <label class="sr-only" for="click-filter-field">Campo para filtrar</label>
+                <select
+                  id="click-filter-field"
+                  [(ngModel)]="clickFilterField"
+                  [ngModelOptions]="{ standalone: true }"
+                  (ngModelChange)="onClickFilterFieldChange($event)"
+                  class="px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                >
+                  @for (field of clickFilterFields; track field.value) {
+                    <option [value]="field.value">{{ field.label }}</option>
+                  }
+                </select>
+                <label class="sr-only" for="click-filter-value">Texto para filtrar</label>
+                @if (clickFilterField === 'all') {
+                  <input
+                    id="click-filter-value"
+                    [(ngModel)]="clickFilterValue"
+                    [ngModelOptions]="{ standalone: true }"
+                    class="flex-1 px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder:text-slate-500"
+                    placeholder="Buscar en todos los campos"
+                  />
+                } @else {
+                  <label class="sr-only" for="click-filter-option">Valor del filtro</label>
+                  <select
+                    id="click-filter-option"
+                    [(ngModel)]="clickFilterValue"
+                    [ngModelOptions]="{ standalone: true }"
+                    (ngModelChange)="applyClickFilter()"
+                    class="flex-1 px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-white"
+                  >
+                    <option value="">Todos los valores</option>
+                    @for (option of clickDetails?.filterOptions ?? []; track option) {
+                      <option [value]="option">{{ formatClickFilterOption(option) }}</option>
+                    }
+                  </select>
+                }
+                <button
+                  type="submit"
+                  class="px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium disabled:opacity-50"
+                  [disabled]="clickDetailsLoading"
+                >
+                  Filtrar
+                </button>
+                <button
+                  type="button"
+                  (click)="clearClickFilter()"
+                  class="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium disabled:opacity-50"
+                  [disabled]="clickDetailsLoading || (!clickFilterValue && clickFilterField === 'all' && !clickDateFrom && !clickDateTo && !clickHourFrom && !clickHourTo && clickPeriod === 'day')"
+                >
+                  Limpiar
+                </button>
+              </form>
+
+              @if (clickDetailsError) {
+                <div class="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300">
+                  {{ clickDetailsError }}
+                </div>
+              }
+
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+                <section class="rounded-xl border border-slate-800 bg-slate-800/30 p-4" aria-label="Clics por navegador">
+                  <h4 class="font-semibold text-white mb-3">Clics por navegador</h4>
+                  @if (clickDetails?.byBrowser?.length) {
+                    <div class="space-y-3">
+                      @for (browser of clickDetails?.byBrowser ?? []; track browser.browser) {
+                        <div>
+                          <div class="flex justify-between gap-3 text-sm mb-1">
+                            <span class="text-slate-300">{{ browser.browser }}</span>
+                            <span class="text-slate-400">{{ browser.clicks }} clics · {{ browser.uniqueVisitors }} visitantes</span>
+                          </div>
+                          <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full rounded-full bg-emerald-400" [style.width.%]="browserBarWidth(browser.clicks)"></div>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <p class="text-sm text-slate-500">Sin datos para el periodo seleccionado.</p>
+                  }
+                </section>
+
+                <section class="rounded-xl border border-slate-800 bg-slate-800/30 p-4" aria-label="Horas de mayor actividad">
+                  <h4 class="font-semibold text-white mb-3">Actividad por hora</h4>
+                  <div class="grid grid-cols-6 sm:grid-cols-12 gap-2 items-end">
+                    @for (hour of hourOptions; track hour.value) {
+                      <div class="text-center" [title]="hour.label + ': ' + hourClickCount(hour.value) + ' clics'">
+                        <div class="h-16 flex items-end justify-center">
+                          <div class="w-3/4 min-h-0.5 rounded-t bg-indigo-400" [style.height.%]="hourBarHeight(hour.value)"></div>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1">{{ hour.label.slice(0, 2) }}</div>
+                        <div class="text-[10px] text-slate-300">{{ hourClickCount(hour.value) }}</div>
+                      </div>
+                    }
+                  </div>
+                </section>
+
+                <section class="xl:col-span-2 rounded-xl border border-slate-800 bg-slate-800/30 p-4" aria-label="Clics por periodo">
+                  <h4 class="font-semibold text-white mb-3">Clics por {{ periodLabel(clickDetails?.period ?? clickPeriod) }}</h4>
+                  @if (clickDetails?.byPeriod?.length) {
+                    <div class="max-h-52 overflow-y-auto space-y-2">
+                      @for (bucket of clickDetails?.byPeriod ?? []; track bucket.bucket) {
+                        <div class="grid grid-cols-[minmax(5rem,auto)_1fr_auto] gap-3 items-center text-sm">
+                          <span class="text-slate-400">{{ formatPeriodBucket(bucket.bucket) }}</span>
+                          <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
+                            <div class="h-full rounded-full bg-indigo-400" [style.width.%]="periodBarWidth(bucket.clicks)"></div>
+                          </div>
+                          <span class="text-slate-300 tabular-nums">{{ bucket.clicks }}</span>
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <p class="text-sm text-slate-500">Sin clics para agrupar.</p>
+                  }
+                </section>
+              </div>
+
+              @if (clickDetailsLoading && !clickDetails) {
+                <div class="py-14 text-center text-slate-400">Cargando clics…</div>
+              } @else {
+                <div class="overflow-auto rounded-xl border border-slate-800">
+                  <table class="min-w-[1200px] w-full text-left text-sm">
+                    <thead class="sticky top-0 bg-slate-800 text-slate-300">
+                      <tr>
+                        <th class="p-3 font-medium">Fecha</th>
+                        <th class="p-3 font-medium">País</th>
+                        <th class="p-3 font-medium">Estado</th>
+                        <th class="p-3 font-medium">Región</th>
+                        <th class="p-3 font-medium">Navegador</th>
+                        <th class="p-3 font-medium">Sistema</th>
+                        <th class="p-3 font-medium">Dispositivo</th>
+                        <th class="p-3 font-medium">IP</th>
+                        <th class="p-3 font-medium">Referer</th>
+                        <th class="p-3 font-medium">User-agent</th>
+                        <th class="p-3 font-medium">Token</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800">
+                      @for (visit of clickDetails?.clicks ?? []; track visit.id) {
+                        <tr class="align-top text-slate-300 hover:bg-slate-800/50">
+                          <td class="p-3 whitespace-nowrap">{{ visit.created_at | date: 'short' }}</td>
+                          <td class="p-3">{{ visit.pais || '—' }}</td>
+                          <td class="p-3">{{ visit.estado || '—' }}</td>
+                          <td class="p-3">{{ visit.region || '—' }}</td>
+                          <td class="p-3">{{ visit.browser || '—' }}</td>
+                          <td class="p-3">{{ visit.os || '—' }}</td>
+                          <td class="p-3">{{ visit.device || '—' }}</td>
+                          <td class="p-3">{{ visit.ip || '—' }}</td>
+                          <td class="p-3 max-w-48 truncate" [title]="visit.referrer || ''">{{ visit.referrer || '—' }}</td>
+                          <td class="p-3 max-w-64 break-all">{{ visit.user_agent || '—' }}</td>
+                          <td class="p-3 max-w-40 break-all">{{ visit.token || '—' }}</td>
+                        </tr>
+                      } @empty {
+                        @if (!clickDetailsLoading) {
+                          <tr>
+                            <td colspan="11" class="p-8 text-center text-slate-500">No hay clics que coincidan con este filtro.</td>
+                          </tr>
+                        }
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                <footer class="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 text-sm text-slate-400">
+                  <span>Mostrando {{ clickDetails?.clicks?.length ?? 0 }} de {{ clickDetails?.matchingClicks ?? 0 }} coincidencias</span>
+                  <div class="flex items-center gap-3">
+                    <button
+                      (click)="changeClickPage(-1)"
+                      class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                      [disabled]="clickDetailsLoading || !clickDetails || clickDetails.page <= 1"
+                    >Anterior</button>
+                    <span>Página {{ clickDetails?.page ?? 1 }} de {{ clickDetails?.totalPages ?? 0 }}</span>
+                    <button
+                      (click)="changeClickPage(1)"
+                      class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-40"
+                      [disabled]="clickDetailsLoading || !clickDetails || clickDetails.page >= clickDetails.totalPages"
+                    >Siguiente</button>
+                  </div>
+                </footer>
+              }
+            </div>
+          </section>
+        </div>
+      }
+
       <!-- TOAST DE NOTIFICACIÓN ELEGANTE (Aparece y desaparece) -->
       @if (showToast) {
         <div
@@ -362,6 +693,38 @@ export class DashboardComponent implements OnInit {
   showDeleteModal = false;
   selectedLink: Link | null = null;
   editUrlValue = '';
+
+  showClickDetailsModal = false;
+  selectedClicksLink: Link | null = null;
+  clickDetails: LinkClickDetails | null = null;
+  clickDetailsLoading = false;
+  clickDetailsError = '';
+  clickFilterField: ClickFilterField = 'all';
+  clickFilterValue = '';
+  clickDateFrom = '';
+  clickDateTo = '';
+  clickHourFrom = '';
+  clickHourTo = '';
+  clickPeriod: ClickPeriod = 'day';
+  readonly clickTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  readonly hourOptions = Array.from({ length: 24 }, (_, value) => ({
+    value: String(value),
+    label: `${String(value).padStart(2, '0')}:00`,
+  }));
+  readonly clickFilterFields: { value: ClickFilterField; label: string }[] = [
+    { value: 'all', label: 'Todos los campos' },
+    { value: 'created_at', label: 'Fecha' },
+    { value: 'token', label: 'Token' },
+    { value: 'user_agent', label: 'User-agent' },
+    { value: 'ip', label: 'IP' },
+    { value: 'pais', label: 'País' },
+    { value: 'estado', label: 'Estado' },
+    { value: 'region', label: 'Región' },
+    { value: 'browser', label: 'Navegador' },
+    { value: 'os', label: 'Sistema operativo' },
+    { value: 'device', label: 'Dispositivo' },
+    { value: 'referrer', label: 'Referer' },
+  ];
 
   showToast = false;
   //Notificación Error
@@ -492,6 +855,133 @@ export class DashboardComponent implements OnInit {
     navigator.clipboard.writeText(url);
 
     this.showNotification('¡Enlace copiado al portapapeles!');
+  }
+
+  openClickDetails(link: Link) {
+    this.selectedClicksLink = link;
+    this.showClickDetailsModal = true;
+    this.clickDetails = null;
+    this.clickFilterField = 'all';
+    this.clickFilterValue = '';
+    this.clickDateFrom = '';
+    this.clickDateTo = '';
+    this.clickHourFrom = '';
+    this.clickHourTo = '';
+    this.clickPeriod = 'day';
+    this.loadClickDetails();
+  }
+
+  closeClickDetails() {
+    this.showClickDetailsModal = false;
+    this.selectedClicksLink = null;
+    this.clickDetails = null;
+    this.clickDetailsError = '';
+  }
+
+  applyClickFilter() {
+    this.loadClickDetails(1);
+  }
+
+  onClickFilterFieldChange(field: ClickFilterField) {
+    this.clickFilterField = field;
+    this.clickFilterValue = '';
+    this.loadClickDetails(1);
+  }
+
+  formatClickFilterOption(value: string): string {
+    if (this.clickFilterField === 'created_at') {
+      const date = new Date(value);
+      if (!Number.isNaN(date.getTime())) return date.toLocaleString();
+    }
+    return value.length > 100 ? `${value.slice(0, 100)}…` : value;
+  }
+
+  clearClickFilter() {
+    this.clickFilterField = 'all';
+    this.clickFilterValue = '';
+    this.clickDateFrom = '';
+    this.clickDateTo = '';
+    this.clickHourFrom = '';
+    this.clickHourTo = '';
+    this.clickPeriod = 'day';
+    this.loadClickDetails(1);
+  }
+
+  changeClickPage(direction: -1 | 1) {
+    if (!this.clickDetails) return;
+    this.loadClickDetails(this.clickDetails.page + direction);
+  }
+
+  private loadClickDetails(page = 1) {
+    const link = this.selectedClicksLink;
+    if (!link) return;
+
+    this.clickDetailsLoading = true;
+    this.clickDetailsError = '';
+    this.analyticsService
+      .getLinkClicks(link.alias, page, {
+        field: this.clickFilterField,
+        value: this.clickFilterValue,
+        dateFrom: this.clickDateFrom,
+        dateTo: this.clickDateTo,
+        hourFrom: this.clickHourFrom,
+        hourTo: this.clickHourTo,
+        period: this.clickPeriod,
+        timeZone: this.clickTimeZone,
+      })
+      .subscribe({
+        next: (details) => {
+          this.clickDetails = details;
+          this.clickDetailsLoading = false;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          this.clickDetailsError =
+            error?.error?.message || 'No se pudieron cargar los clics de este enlace.';
+          this.clickDetailsLoading = false;
+          this.cdr.detectChanges();
+        },
+      });
+  }
+
+  private get maxBrowserClicks(): number {
+    return Math.max(0, ...(this.clickDetails?.byBrowser ?? []).map((item) => item.clicks));
+  }
+
+  private get maxHourClicks(): number {
+    return Math.max(0, ...(this.clickDetails?.byHour ?? []).map((item) => item.clicks));
+  }
+
+  private get maxPeriodClicks(): number {
+    return Math.max(0, ...(this.clickDetails?.byPeriod ?? []).map((item) => item.clicks));
+  }
+
+  browserBarWidth(clicks: number): number {
+    return this.maxBrowserClicks ? (clicks / this.maxBrowserClicks) * 100 : 0;
+  }
+
+  hourClickCount(hourValue: string): number {
+    return this.clickDetails?.byHour.find((item) => item.hour === Number.parseInt(hourValue, 10))?.clicks ?? 0;
+  }
+
+  hourBarHeight(hourValue: string): number {
+    const count = this.hourClickCount(hourValue);
+    return this.maxHourClicks ? Math.max(4, (count / this.maxHourClicks) * 100) : 0;
+  }
+
+  periodBarWidth(clicks: number): number {
+    return this.maxPeriodClicks ? (clicks / this.maxPeriodClicks) * 100 : 0;
+  }
+
+  periodLabel(period: ClickPeriod): string {
+    return period === 'month' ? 'mes' : period === 'week' ? 'semana' : 'día';
+  }
+
+  formatPeriodBucket(bucket: string): string {
+    const date = new Date(bucket);
+    return Number.isNaN(date.getTime())
+      ? bucket
+      : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   openEditModal(link: Link) {
