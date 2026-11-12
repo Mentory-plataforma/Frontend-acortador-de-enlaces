@@ -20,65 +20,16 @@ import {
   LinkClickDetails,
 } from '../../services/analytics.service';
 import Pusher from 'pusher-js';
+import { SidebarComponent } from '../sidebar/sidebar.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, SidebarComponent],
   template: `
     <div class="min-h-screen bg-slate-950 text-slate-200 flex relative">
-      <!-- Sidebar -->
-      <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
-        <div class="p-6 flex items-center gap-3">
-          <div
-            class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold"
-          >
-            M
-          </div>
-          <span class="text-xl font-bold text-white tracking-tight">Mentory Links</span>
-        </div>
-
-        <nav class="flex-1 px-4 space-y-2 mt-4">
-          <a
-            href="#"
-            class="flex items-center gap-3 px-4 py-3 rounded-lg bg-indigo-600/10 text-indigo-400 font-medium"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 0m-2-0v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-              ></path>
-            </svg>
-            Dashboard
-          </a>
-          <a
-            href="#"
-            class="flex items-center gap-3 px-4 py-3 rounded-lg bg-indigo-600/10 text-indigo-400 font-medium"
-          >
-          
-            Estadísticas
-          </a>
-        </nav>
-
-        <div class="p-4 border-t border-slate-800">
-          <button
-            (click)="onLogout()"
-            class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-all"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-              ></path>
-            </svg>
-            Cerrar Sesión
-          </button>
-        </div>
-      </aside>
+      <!-- Sidebar compartido (Dashboard / Estadísticas) -->
+      <app-sidebar />
 
       <!-- Main Content -->
       <main class="flex-1 p-8 overflow-y-auto">
@@ -771,6 +722,8 @@ export class DashboardComponent implements OnInit {
             totalClicks: Number(this.stats.totalClicks) + 1,
           };
         }
+        // Mantiene sincronizadas las tarjetas con el backend tras un nuevo clic.
+        this.refreshSummary();
 
         this.cdr.detectChanges();
       });
@@ -793,9 +746,14 @@ export class DashboardComponent implements OnInit {
       },
     });
 
+    this.refreshSummary();
+  }
+
+  /** Tarjetas "Enlaces Totales" y "Clics Globales" desde GET /api/analytics/summary. */
+  refreshSummary() {
     this.analyticsService.getStats().subscribe({
-      next: (respuesta: any) => {
-        this.stats = respuesta.data ? respuesta.data : respuesta;
+      next: (summary) => {
+        this.stats = summary;
         this.cdr.detectChanges();
       },
       error: (err) => console.error('Error cargando analíticas:', err),
